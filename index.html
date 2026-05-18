@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>報表系統</title>
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f0f0f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="工作機">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <!-- 本地 JS（離線可用） -->
+  <script src="chart.umd.min.js"></script>
+  <script src="hammer.min.js"></script>
+  <script src="chartjs-plugin-zoom.min.js"></script>
+  <!-- Service Worker 註冊 -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js')
+          .then(r => console.log('[SW] registered:', r.scope))
+          .catch(e => console.error('[SW] failed:', e));
+      });
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f0f; --surface: #1a1a1a; --surface2: #141414;
+      --border: #242424; --border2: #2c2c2c;
+      --txt: #e8e8e8; --txt2: #888; --txt3: #555;
+      --accent: #5ba3f5; --accent-hv: #4a91e2;
+      --green: #22c55e; --red: #ef4444; --orange: #f97316;
+    }
+    body { font-family: 'Microsoft JhengHei','Segoe UI',sans-serif; background:var(--bg); color:var(--txt); min-height:100vh; }
+
+    /* Header */
+    header { background:var(--bg); color:var(--txt); padding:14px 20px; font-size:1.15rem; font-weight:600; letter-spacing:.03em; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+    .settings-btn { background:transparent; border:none; color:var(--txt3); font-size:1.15rem; cursor:pointer; padding:5px 8px; border-radius:6px; line-height:1; transition:color .18s,background .18s; }
+    .settings-btn:hover { color:var(--txt); background:rgba(255,255,255,.05); }
+    .settings-panel { background:var(--surface); border-bottom:1px solid var(--border); overflow:hidden; max-height:0; transition:max-height .22s ease,padding .22s ease; }
+    .settings-panel.open { max-height:72px; padding:12px 20px; }
+    .settings-row { display:flex; align-items:center; gap:12px; max-width:960px; margin:0 auto; }
+    .settings-label { font-size:.78rem; color:var(--txt3); white-space:nowrap; }
+    .settings-input { padding:7px 10px; background:var(--surface2); border:1px solid var(--border2); border-radius:6px; font-size:.9rem; font-family:inherit; color:var(--txt); width:160px; transition:border-color .18s; }
+    .settings-input:focus { outline:none; border-color:var(--accent); }
+    .settings-saved { font-size:.75rem; color:var(--green); opacity:0; transition:opacity .3s; }
+    .settings-saved.show { opacity:1; }
+
+    /* Tabs */
+    .tab-bar { display:flex; background:#111; border-bottom:1px solid var(--border); overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .tab-btn { flex:1; min-width:100px; padding:14px 16px; border:none; background:transparent; color:var(--txt3); font-size:.92rem; font-family:inherit; cursor:pointer; border-bottom:2px solid transparent; transition:color .18s,border-color .18s; white-space:nowrap; }
+    .tab-btn:hover { color:#aaa; }
+    .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+    .tab-content { display:none; padding:20px 16px; max-width:960px; margin:0 auto; animation:fadeIn .2s ease; }
+    .tab-content.active { display:block; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+
+    /* Form cards */
+    .form-card { background:var(--surface); border-radius:10px; padding:16px; margin-bottom:10px; border:1px solid var(--border); }
+    .form-card-title { font-size:.7rem; font-weight:700; color:var(--accent); letter-spacing:.1em; text-transform:uppercase; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    .form-grid   { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .form-grid-2 { grid-template-columns:repeat(2,1fr); }
+    .form-grid-4 { grid-template-columns:repeat(4,1fr); }
+    .form-grid-1 { grid-template-columns:1fr; }
+    .form-group  { display:flex; flex-direction:column; gap:4px; }
+    .form-group label { font-size:.72rem; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .form-group input { padding:8px 10px; background:var(--surface2); border:1px solid var(--border2); border-radius:6px; font-size:.95rem; font-family:inherit; color:var(--txt); width:100%; transition:border-color .18s,box-shadow .18s; }
+    .form-group input::placeholder { color:var(--txt3); }
+    .form-group input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(91,163,245,.14); }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter:invert(.6); }
+    .field-hint { font-size:.66rem; color:var(--txt3); font-style:italic; min-height:12px; line-height:1.2; }
+
+    /* Buttons */
+    .btn-calc { width:100%; padding:13px; background:var(--accent); color:#0a0a0a; border:none; border-radius:8px; font-size:.98rem; font-family:inherit; font-weight:700; cursor:pointer; margin-bottom:10px; letter-spacing:.02em; transition:background .18s; }
+    .btn-calc:hover { background:var(--accent-hv); }
+    .action-row { display:flex; gap:8px; margin-bottom:14px; }
+    .btn-sec { flex:1; padding:9px 8px; background:transparent; border:1px solid var(--border2); border-radius:8px; color:var(--txt2); font-size:.8rem; font-family:inherit; cursor:pointer; transition:all .15s; }
+    .btn-sec:hover { border-color:var(--txt2); color:var(--txt); }
+    .btn-sec.warn:hover { border-color:var(--orange); color:var(--orange); }
+    .btn-copy { width:100%; padding:11px; background:transparent; color:var(--txt2); border:1px solid var(--border2); border-radius:8px; font-size:.9rem; font-family:inherit; font-weight:600; cursor:pointer; margin-top:12px; transition:all .18s; }
+    .btn-copy:hover  { border-color:var(--accent); color:var(--accent); background:rgba(91,163,245,.06); }
+    .btn-copy.copied { border-color:var(--green); color:var(--green); background:rgba(34,197,94,.08); }
+    .btn-save { width:100%; padding:11px; background:transparent; color:#3a7a5a; border:1px solid #1a2e24; border-radius:8px; font-size:.9rem; font-family:inherit; font-weight:600; cursor:pointer; margin-top:8px; transition:all .18s; }
+    .btn-save:hover { border-color:var(--green); color:var(--green); background:rgba(34,197,94,.07); }
+    .btn-save.saved { border-color:var(--green); color:var(--green); background:rgba(34,197,94,.1); }
+    .btn-danger { width:100%; padding:10px; background:transparent; border:1px solid #2a1a1a; border-radius:8px; color:#5a3030; font-size:.85rem; font-family:inherit; cursor:pointer; margin-top:12px; transition:all .18s; }
+    .btn-danger:hover { border-color:var(--red); color:var(--red); background:rgba(239,68,68,.06); }
+    .btn-reset-zoom { padding:4px 10px; background:transparent; border:1px solid var(--border2); border-radius:5px; color:var(--txt3); font-size:.72rem; font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .btn-reset-zoom:hover { border-color:var(--accent); color:var(--accent); }
+
+    /* Result card */
+    .result-card { background:var(--surface); border-radius:10px; padding:16px; border:1px solid var(--border); display:none; }
+    .result-card.visible { display:block; }
+    .result-card-title { font-size:.7rem; font-weight:700; color:var(--green); letter-spacing:.1em; text-transform:uppercase; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    .result-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px; }
+    .result-item { background:var(--surface2); border:1px solid var(--border); border-radius:7px; padding:9px 11px; }
+    .result-item .r-label { font-size:.67rem; color:var(--txt3); margin-bottom:4px; }
+    .result-item .r-value { font-size:1rem; font-weight:700; color:#c8c8c8; }
+    .result-item .r-value.highlight { color:var(--accent); }
+    .result-item .r-value.warn { color:var(--red); }
+    .report-pre { background:var(--surface2); border:1px solid var(--border); border-radius:7px; padding:14px; font-family:'Courier New',monospace; font-size:.87rem; line-height:1.72; white-space:pre-wrap; word-break:break-all; color:#b8b8b8; margin-top:12px; max-height:460px; overflow-y:auto; }
+
+    /* Group report */
+    .group-hint { font-size:.8rem; color:var(--txt3); line-height:1.6; margin-bottom:12px; }
+    .group-textarea { width:100%; height:280px; padding:10px 12px; background:var(--surface2); border:1px solid var(--border2); border-radius:6px; font-size:.85rem; font-family:'Courier New',monospace; line-height:1.65; color:#b8b8b8; resize:vertical; transition:border-color .18s,box-shadow .18s; }
+    .group-textarea::placeholder { color:#333; }
+    .group-textarea:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(91,163,245,.14); }
+    .group-error { display:none; background:#1a1200; border:1px solid #5a4000; border-radius:8px; padding:11px 14px; font-size:.85rem; color:#c9952a; margin-bottom:12px; }
+    .group-error.visible { display:block; }
+
+    /* Trend sub-nav */
+    .subnav { display:flex; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:4px; margin-bottom:14px; gap:4px; }
+    .subbtn { flex:1; padding:8px 10px; background:transparent; border:none; border-radius:7px; color:var(--txt3); font-size:.85rem; font-family:inherit; cursor:pointer; transition:all .15s; }
+    .subbtn:hover { color:#aaa; }
+    .subbtn.active { background:var(--surface2); border:1px solid var(--border); color:var(--txt); font-weight:600; }
+
+    /* Scale controls */
+    .scale-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+    .scale-group { display:flex; background:var(--surface2); border:1px solid var(--border); border-radius:7px; overflow:hidden; }
+    .scale-btn,.mode-btn { padding:5px 11px; background:transparent; border:none; border-right:1px solid var(--border); color:var(--txt3); font-size:.75rem; font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .scale-btn:last-child,.mode-btn:last-child { border-right:none; }
+    .scale-btn:hover,.mode-btn:hover { color:#aaa; background:rgba(255,255,255,.03); }
+    .scale-btn.active,.mode-btn.active { background:rgba(91,163,245,.15); color:var(--accent); font-weight:600; }
+
+    /* Trend charts */
+    .trend-toggle { display:flex; gap:8px; margin-bottom:10px; }
+    .trend-toggle-btn { flex:1; padding:10px 14px; background:var(--surface); border:1px solid var(--border); border-radius:8px; color:var(--txt3); font-size:.9rem; font-family:inherit; font-weight:500; cursor:pointer; transition:all .18s; }
+    .trend-toggle-btn:hover { color:#aaa; border-color:var(--border2); }
+    .trend-toggle-btn.active { color:var(--accent); border-color:var(--accent); background:rgba(91,163,245,.08); font-weight:600; }
+    .chart-wrap { position:relative; height:240px; }
+    .trend-empty { text-align:center; padding:48px 24px; color:var(--txt3); font-size:.9rem; background:var(--surface); border-radius:10px; border:1px solid var(--border); margin-bottom:10px; }
+
+    /* Chart layout */
+    .chart-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    .chart-header .form-card-title { margin:0; padding:0; border:none; }
+    .chart-and-filter { display:flex; gap:14px; align-items:flex-start; }
+    .chart-main { flex:1; min-width:0; }
+    .filter-sidebar { width:110px; flex-shrink:0; }
+    .filter-title { font-size:.68rem; color:var(--txt3); letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px; }
+
+    /* Member chips — pill tag style */
+    .member-filter { display:flex; flex-direction:column; gap:5px; }
+    .member-chip { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:14px; border:1.5px solid var(--chip-color,var(--accent)); background:transparent; color:var(--chip-color,var(--accent)); font-size:.78rem; font-family:inherit; cursor:pointer; transition:all .15s; user-select:none; white-space:nowrap; }
+    .member-chip.active { background:var(--chip-color,var(--accent)); color:#0a0a0a; }
+    .member-chip .member-dot { display:none; }
+
+    /* History list */
+    .hist-item { display:flex; align-items:center; gap:10px; padding:10px 2px; border-bottom:1px solid var(--border); }
+    .hist-item:last-child { border-bottom:none; }
+    .hist-date { font-size:.85rem; font-weight:600; color:var(--accent); min-width:38px; flex-shrink:0; }
+    .hist-stats { flex:1; font-size:.78rem; color:var(--txt2); line-height:1.55; }
+    .hist-del { background:transparent; border:1px solid #2a2a2a; border-radius:4px; color:#444; cursor:pointer; padding:3px 8px; font-size:.72rem; flex-shrink:0; transition:all .15s; }
+    .hist-del:hover { border-color:var(--red); color:var(--red); }
+
+    /* Team manage */
+    .entry-header { display:grid; grid-template-columns:80px 1fr 1fr 1fr; gap:8px; margin-bottom:4px; }
+    .entry-header span { font-size:.68rem; color:var(--txt3); letter-spacing:.04em; }
+    .entry-row { display:grid; grid-template-columns:80px 1fr 1fr 1fr; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); }
+    .entry-row:last-child { border-bottom:none; }
+    .entry-name { display:flex; align-items:center; gap:6px; font-size:.83rem; color:var(--txt2); overflow:hidden; }
+    .entry-name span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .entry-input { padding:6px 8px; background:var(--surface2); border:1px solid var(--border2); border-radius:6px; font-size:.88rem; font-family:inherit; color:var(--txt); width:100%; transition:border-color .18s; }
+    .entry-input:focus { outline:none; border-color:var(--accent); }
+    .entry-input::placeholder { color:var(--txt3); }
+    .add-member-row { display:flex; gap:8px; margin-bottom:12px; }
+    .member-name-input { flex:1; padding:8px 10px; background:var(--surface2); border:1px solid var(--border2); border-radius:6px; font-size:.9rem; font-family:inherit; color:var(--txt); transition:border-color .18s; }
+    .member-name-input:focus { outline:none; border-color:var(--accent); }
+    .member-name-input::placeholder { color:var(--txt3); }
+    .btn-add { padding:8px 16px; background:var(--accent); color:#0a0a0a; border:none; border-radius:6px; font-size:.88rem; font-family:inherit; font-weight:700; cursor:pointer; white-space:nowrap; transition:background .18s; }
+    .btn-add:hover { background:var(--accent-hv); }
+    .member-list-row { display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--border); }
+    .member-list-row:last-child { border-bottom:none; }
+    .member-list-name { flex:1; font-size:.9rem; color:var(--txt); }
+    .member-list-del { background:transparent; border:1px solid #2a2a2a; border-radius:4px; color:#444; cursor:pointer; padding:3px 8px; font-size:.72rem; flex-shrink:0; transition:all .15s; }
+    .member-list-del:hover { border-color:var(--red); color:var(--red); }
+
+    /* Summary cards */
+    .summary-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; }
+    .summary-card { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px; border-top:2px solid var(--card-color,var(--accent)); }
+    .summary-name { font-size:.85rem; font-weight:600; color:var(--txt); margin-bottom:4px; }
+    .summary-date { font-size:.68rem; color:var(--txt3); margin-bottom:8px; }
+    .summary-stat { font-size:.77rem; color:var(--txt2); line-height:1.85; }
+    .summary-stat strong { color:var(--txt); font-weight:600; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#333; border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:#444; }
+
+    /* Responsive */
+    @media (max-width:600px) {
+      .chart-and-filter { flex-direction:column; }
+      .filter-sidebar { width:100%; }
+      .member-filter { flex-direction:row; flex-wrap:wrap; }
+      .summary-grid { grid-template-columns:1fr 1fr; }
+    }
+    @media (max-width:540px) {
+      header { font-size:1rem; padding:12px 16px; }
+      .tab-btn { font-size:.86rem; padding:12px 10px; }
+      .tab-content { padding:12px 10px; }
+      .form-grid { grid-template-columns:repeat(2,1fr); }
+      .form-grid-4 { grid-template-columns:repeat(2,1fr); }
+      .result-grid { grid-template-columns:repeat(2,1fr); }
+      .entry-header,.entry-row { grid-template-columns:70px 1fr 1fr; }
+      .summary-grid { grid-template-columns:1fr; }
+      .scale-controls { gap:6px; }
+    }
+    @media (max-width:360px) { .form-grid { grid-template-columns:1fr 1fr; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <span>報表系統</span>
+  <button class="settings-btn" onclick="toggleSettings()" title="設定">⚙</button>
+</header>
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-row">
+    <label class="settings-label">我的名字</label>
+    <input type="text" id="settingsName" class="settings-input" placeholder="例：Leo" oninput="saveSettings()">
+    <span class="settings-saved" id="settingsSaved">已儲存</span>
+  </div>
+</div>
+
+<nav class="tab-bar" role="tablist">
+  <button class="tab-btn active" role="tab" aria-selected="true"  onclick="switchTab('personal')">個人報表</button>
+  <button class="tab-btn"        role="tab" aria-selected="false" onclick="switchTab('group')">小組報表</button>
+  <button class="tab-btn"        role="tab" aria-selected="false" onclick="switchTab('trend')">趨勢圖</button>
+</nav>
+
+<main>
+<!-- ═══ 個人報表 ═══ -->
+<section id="tab-personal" class="tab-content active" role="tabpanel">
+
+  <div class="form-card">
+    <div class="form-card-title">基本資訊</div>
+    <div class="form-grid form-grid-1" style="margin-bottom:10px;">
+      <div class="form-group">
+        <label>報表日期</label>
+        <input type="date" id="rptDate">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>總學生數</label>
+        <input type="number" id="stu" placeholder="0" min="0">
+        <small class="field-hint" id="h-stu"></small>
+      </div>
+      <div class="form-group">
+        <label>新增學生(+)</label>
+        <input type="number" id="stuAdd" placeholder="0" min="0" oninput="autoCalcStu()">
+        <small class="field-hint" id="h-stuAdd"></small>
+      </div>
+      <div class="form-group">
+        <label>減少學生(-)</label>
+        <input type="number" id="stuSub" placeholder="0" min="0" oninput="autoCalcStu()">
+        <small class="field-hint" id="h-stuSub"></small>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">業績</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>業績目標</label>
+        <input type="text" id="revGoal" placeholder="17W 或 170000">
+        <small class="field-hint" id="h-revGoal"></small>
+      </div>
+      <div class="form-group">
+        <label>今日業績 LDW</label>
+        <input type="number" id="ldw" placeholder="0" min="0" oninput="autoCalcMtd()">
+        <small class="field-hint" id="h-ldw"></small>
+      </div>
+      <div class="form-group">
+        <label>MTD 累計業績</label>
+        <input type="number" id="mtd" placeholder="0" min="0" oninput="mtdManual=true">
+        <small class="field-hint" id="h-mtd"></small>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">課堂</div>
+    <div class="form-grid form-grid-4">
+      <div class="form-group">
+        <label>課堂目標</label>
+        <input type="number" id="clsGoal" placeholder="0" min="0">
+        <small class="field-hint" id="h-clsGoal"></small>
+      </div>
+      <div class="form-group">
+        <label>今日課堂數</label>
+        <input type="number" id="clsToday" placeholder="0" min="0" oninput="autoCalcClsMtd()">
+        <small class="field-hint" id="h-clsToday"></small>
+      </div>
+      <div class="form-group">
+        <label>課堂總數 MTD</label>
+        <input type="number" id="clsMtd" placeholder="0" min="0" oninput="clsMtdManual=true">
+        <small class="field-hint" id="h-clsMtd"></small>
+      </div>
+      <div class="form-group">
+        <label>下次上班課堂</label>
+        <input type="number" id="clsNext" placeholder="0" min="0">
+        <small class="field-hint" id="h-clsNext"></small>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">FA &amp; 已約</div>
+    <div class="form-grid form-grid-4">
+      <div class="form-group">
+        <label>已約堂數</label>
+        <input type="number" id="booked" placeholder="0" min="0">
+        <small class="field-hint" id="h-booked"></small>
+      </div>
+      <div class="form-group">
+        <label>成交FA數</label>
+        <input type="number" id="fa1" placeholder="0" min="0">
+        <small class="field-hint" id="h-fa1"></small>
+      </div>
+      <div class="form-group">
+        <label>已約來FA數</label>
+        <input type="number" id="fa2" placeholder="0" min="0">
+        <small class="field-hint" id="h-fa2"></small>
+      </div>
+      <div class="form-group">
+        <label>FA目標</label>
+        <input type="number" id="fa3" placeholder="0" min="0">
+        <small class="field-hint" id="h-fa3"></small>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-calc" onclick="calculate()">計算並產生報表</button>
+  <div class="action-row">
+    <button class="btn-sec" onclick="undoPersonalForm()">↩ 還原上次</button>
+    <button class="btn-sec warn" onclick="monthStartReset()">月初重置</button>
+  </div>
+
+  <div class="result-card" id="resultCard">
+    <div class="result-card-title">計算結果</div>
+    <div class="result-grid" id="resultGrid"></div>
+    <div class="report-pre" id="reportText"></div>
+    <button class="btn-copy" id="copyBtn" onclick="copyReport()">複製報表文字</button>
+    <button class="btn-save" id="saveHistBtn" onclick="saveToHistory()">儲存到趨勢紀錄</button>
+  </div>
+
+</section>
+
+<!-- ═══ 小組報表 ═══ -->
+<section id="tab-group" class="tab-content" role="tabpanel">
+  <div class="form-card">
+    <div class="form-card-title">貼上前次小組報表</div>
+    <p class="group-hint">請先在「個人報表」計算完畢，再貼入前一位同事的小組報表，系統會自動更新你的三行並重算小組總計，同時自動同步數據至趨勢圖。</p>
+    <div class="form-group">
+      <label>小組報表原文</label>
+      <textarea id="groupInput" class="group-textarea" placeholder="在此貼上同事傳來的小組報表文字…"></textarea>
+    </div>
+  </div>
+  <div class="group-error" id="groupError"></div>
+  <button class="btn-calc" onclick="processGroup()">更新並重算小組總計</button>
+  <div class="result-card" id="groupResultCard">
+    <div class="result-card-title">更新後的小組報表</div>
+    <div class="report-pre" id="groupReportText"></div>
+    <button class="btn-copy" id="groupCopyBtn" onclick="copyGroupReport()">複製小組報表</button>
+  </div>
+</section>
+
+<!-- ═══ 趨勢圖 ═══ -->
+<section id="tab-trend" class="tab-content" role="tabpanel">
+
+  <div class="subnav">
+    <button class="subbtn active" onclick="switchSub('personal')">個人趨勢</button>
+    <button class="subbtn"        onclick="switchSub('team')">小組趨勢</button>
+    <button class="subbtn"        onclick="switchSub('manage')">成員管理</button>
+  </div>
+
+  <!-- 個人趨勢 -->
+  <div id="subPersonal">
+    <div class="trend-toggle">
+      <button class="trend-toggle-btn active" data-mode="rev"    onclick="switchTrend('rev')">業績趨勢</button>
+      <button class="trend-toggle-btn"         data-mode="booked" onclick="switchTrend('booked')">已約課堂趨勢</button>
+    </div>
+    <div class="scale-controls" id="personalScaleCtrl">
+      <div class="scale-group">
+        <button class="scale-btn active" data-scale="day"   onclick="setPersonalScale('day')">日</button>
+        <button class="scale-btn"         data-scale="week"  onclick="setPersonalScale('week')">週</button>
+        <button class="scale-btn"         data-scale="month" onclick="setPersonalScale('month')">月</button>
+        <button class="scale-btn"         data-scale="year"  onclick="setPersonalScale('year')">年</button>
+      </div>
+      <div class="scale-group">
+        <button class="mode-btn active" data-mode="monthly"    onclick="setPersonalMode('monthly')">每月重置</button>
+        <button class="mode-btn"         data-mode="cumulative" onclick="setPersonalMode('cumulative')">歷史累加</button>
+      </div>
+    </div>
+    <div class="form-card" id="trendChartCard" style="display:none;">
+      <div class="chart-header">
+        <span class="form-card-title" id="trendChartTitle">業績趨勢</span>
+        <button class="btn-reset-zoom" onclick="resetPersonalZoom()">重置縮放</button>
+      </div>
+      <div class="chart-wrap"><canvas id="trendCanvas"></canvas></div>
+    </div>
+    <div class="trend-empty" id="trendEmpty">尚無個人趨勢紀錄，請在「個人報表」計算後點擊「儲存到趨勢紀錄」。</div>
+    <div class="form-card" id="trendHistCard" style="display:none;">
+      <div class="form-card-title">歷史紀錄</div>
+      <div id="historyList"></div>
+      <button class="btn-danger" onclick="clearAllHistory()">清除所有紀錄</button>
+    </div>
+  </div>
+
+  <!-- 小組趨勢 -->
+  <div id="subTeam" style="display:none;">
+    <div class="trend-toggle">
+      <button class="trend-toggle-btn active" data-type="mtd"    onclick="switchTeamChart('mtd')">業績趨勢</button>
+      <button class="trend-toggle-btn"         data-type="booked" onclick="switchTeamChart('booked')">已約課堂趨勢</button>
+    </div>
+    <div class="scale-controls" id="teamScaleCtrl">
+      <div class="scale-group">
+        <button class="scale-btn active" data-scale="day"   onclick="setTeamScale('day')">日</button>
+        <button class="scale-btn"         data-scale="week"  onclick="setTeamScale('week')">週</button>
+        <button class="scale-btn"         data-scale="month" onclick="setTeamScale('month')">月</button>
+        <button class="scale-btn"         data-scale="year"  onclick="setTeamScale('year')">年</button>
+      </div>
+      <div class="scale-group">
+        <button class="mode-btn active" data-mode="monthly"    onclick="setTeamMode('monthly')">每月重置</button>
+        <button class="mode-btn"         data-mode="cumulative" onclick="setTeamMode('cumulative')">歷史累加</button>
+      </div>
+    </div>
+    <div class="trend-empty" id="teamEmpty">尚無小組數據。產生小組報表後自動同步，或至「成員管理」手動輸入。</div>
+    <div class="form-card" id="teamChartCard" style="display:none;">
+      <div class="chart-header">
+        <span class="form-card-title" id="teamChartTitle">業績趨勢</span>
+        <button class="btn-reset-zoom" onclick="resetTeamZoom()">重置縮放</button>
+      </div>
+      <div class="chart-and-filter">
+        <div class="chart-main">
+          <div class="chart-wrap"><canvas id="teamCanvas"></canvas></div>
+        </div>
+        <div class="filter-sidebar">
+          <div class="filter-title">顯示成員</div>
+          <div class="member-filter" id="memberFilter"></div>
+        </div>
+      </div>
+    </div>
+    <div class="form-card" id="teamSummaryCard" style="display:none;">
+      <div class="form-card-title">最新數據摘要</div>
+      <div class="summary-grid" id="teamSummary"></div>
+    </div>
+  </div>
+
+  <!-- 成員管理 -->
+  <div id="subManage" style="display:none;">
+    <div class="form-card">
+      <div class="form-card-title">小組成員</div>
+      <div class="add-member-row">
+        <input type="text" id="newMemberInput" class="member-name-input" placeholder="輸入名字後新增…" onkeydown="if(event.key==='Enter') addMember()">
+        <button class="btn-add" onclick="addMember()">新增</button>
+      </div>
+      <div id="memberListEl"></div>
+    </div>
+    <div class="form-card">
+      <div class="form-card-title">每日數據輸入</div>
+      <div class="form-grid form-grid-1" style="margin-bottom:12px;">
+        <div class="form-group"><label>日期</label><input type="date" id="teamEntryDate" onchange="renderEntryGrid()"></div>
+      </div>
+      <div id="teamEntryGrid"></div>
+      <button class="btn-calc" id="teamSaveBtn" onclick="saveTeamEntry()">儲存此日數據</button>
+      <button class="btn-danger" onclick="resetTeamData()">清除所有小組趨勢數據</button>
+    </div>
+  </div>
+
+</section>
+</main>
+
+<script>
+/* ════════════════════════════════════════
+   Storage wrapper (file:// fallback)
+════════════════════════════════════════ */
+const _mem = {};
+const _ls  = window.localStorage;
+const storage = {
+  getItem(k)    { try { return _ls.getItem(k); }    catch(e) { return _mem[k] ?? null; } },
+  setItem(k, v) { try { _ls.setItem(k, v); }        catch(e) { _mem[k] = v; } },
+  removeItem(k) { try { _ls.removeItem(k); }        catch(e) { delete _mem[k]; } },
+};
+
+/* ════════════════════════════════════════
+   Constants & state
+════════════════════════════════════════ */
+const SK_NAME    = 'leo_report_username';
+const SK_HIST    = 'leo_report_hist';
+const SK_MEMBERS = 'team_members';
+const SK_TDATA   = 'team_data';
+const SK_FORM    = 'personal_form_data';
+const SK_FORM_P  = 'personal_form_data_prev';
+
+const DEFAULT_MEMBERS = ['Mars','Chloe','Show','Leo','Lion'];
+const COLORS = ['#5ba3f5','#22c55e','#f97316','#a78bfa','#f43f5e','#fbbf24','#06b6d4','#84cc16'];
+
+const MILESTONES  = [110000,140000,170000,200000,250000,300000,350000,500000,650000];
+const MS_LABELS   = ['11萬','14萬','17萬','20萬','25萬','30萬','35萬','50萬','65萬'];
+const MS_COLORS   = [
+  'rgba(120,105,90,.10)','rgba(55,80,160,.10)','rgba(45,130,80,.10)',
+  'rgba(35,145,145,.10)','rgba(115,60,165,.10)','rgba(175,95,35,.10)',
+  'rgba(175,50,95,.10)','rgba(175,145,25,.10)','rgba(25,155,135,.10)',
+  'rgba(175,175,155,.10)',
+];
+
+/* Mutable state */
+let personalData    = null;
+let lastFormData    = null;
+let mtdManual       = false;
+let clsMtdManual    = false;
+let stuManual       = false;
+let trendChartInst  = null;
+let trendMode       = 'rev';
+let personalScale   = 'day';
+let personalMode    = 'monthly';
+let teamChartInst   = null;
+let teamChartType   = 'mtd';
+let teamScale       = 'day';
+let teamMode        = 'monthly';
+let selectedMembers = new Set();
+let currentSub      = 'personal';
+
+/* ════════════════════════════════════════
+   Settings
+════════════════════════════════════════ */
+function getMyName()    { return (storage.getItem(SK_NAME) || '').trim(); }
+function loadSettings() { document.getElementById('settingsName').value = getMyName(); }
+function saveSettings() {
+  storage.setItem(SK_NAME, document.getElementById('settingsName').value.trim());
+  const el = document.getElementById('settingsSaved');
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1500);
+}
+function toggleSettings() { document.getElementById('settingsPanel').classList.toggle('open'); }
+
+/* ════════════════════════════════════════
+   Shared utils
+════════════════════════════════════════ */
+function switchTab(name) {
+  const tabs = ['personal','group','trend'];
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    const a = tabs[i] === name;
+    btn.classList.toggle('active', a);
+    btn.setAttribute('aria-selected', a);
+  });
+  document.querySelectorAll('.tab-content').forEach(s => {
+    s.classList.toggle('active', s.id === 'tab-' + name);
+  });
+  if (name === 'trend') refreshCurrentSub();
+}
+
+function refreshCurrentSub() {
+  if      (currentSub === 'personal') renderTrend();
+  else if (currentSub === 'team')     { renderMemberFilter(); renderTeamChart(); }
+  else if (currentSub === 'manage')   { renderMemberList(); renderEntryGrid(); }
+}
+
+function parseAmount(str) {
+  str = String(str).trim();
+  const m1 = str.match(/^([\d.]+)[萬万]/); if (m1) return Math.floor(parseFloat(m1[1]) * 10000);
+  const m2 = str.match(/^([\d.]+)[Ww]/);   if (m2) return Math.floor(parseFloat(m2[1]) * 10000);
+  return Math.floor(parseFloat(str) || 0);
+}
+function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
+function stuSuffix(add, sub) {
+  let s = '';
+  if (add > 0) s += ' (+' + add + ')';
+  if (sub > 0) s += '(-' + sub + ')';
+  return s;
+}
+function ri(label, value, cls) {
+  return `<div class="result-item"><div class="r-label">${label}</div><div class="r-value ${cls||''}">${value}</div></div>`;
+}
+function copyText(text, btnId, label) {
+  const btn = document.getElementById(btnId);
+  const done = () => { btn.textContent='已複製！'; btn.classList.add('copied'); setTimeout(()=>{btn.textContent=label;btn.classList.remove('copied');},2000); };
+  navigator.clipboard.writeText(text).then(done).catch(() => {
+    const ta=document.createElement('textarea'); ta.value=text; ta.style.cssText='position:fixed;opacity:0;';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done();
+  });
+}
+function dateValToMMDD(v) {
+  if (!v) return '';
+  const p = v.split('-');
+  return String(parseInt(p[1])).padStart(2,'0') + '/' + String(parseInt(p[2])).padStart(2,'0');
+}
+function getMemberColor(idx) { return COLORS[idx % COLORS.length]; }
+function pad2(n) { return String(n).padStart(2,'0'); }
+
+/* ════════════════════════════════════════
+   Personal form memory
+════════════════════════════════════════ */
+function loadPersonalFormData() {
+  const raw = storage.getItem(SK_FORM);
+  if (!raw) return;
+  lastFormData = JSON.parse(raw);
+  fillFormFromData(lastFormData);
+  updateHints(lastFormData);
+}
+
+function fillFormFromData(d) {
+  if (!d) return;
+  const set = (id, v) => { if (v != null) document.getElementById(id).value = v; };
+  set('stu', d.stu); set('stuAdd', d.stuAdd ?? 0); set('stuSub', d.stuSub ?? 0);
+  set('revGoal', d.revGoal); set('ldw', 0); set('mtd', d.mtd);
+  set('clsGoal', d.clsGoal); set('clsToday', 0); set('clsMtd', d.clsMtd);
+  set('clsNext', d.clsNext); set('booked', d.booked);
+  set('fa1', 0); set('fa2', 0); set('fa3', d.fa3);
+  mtdManual = false; clsMtdManual = false; stuManual = false;
+}
+
+function updateHints(d) {
+  if (!d) return;
+  const h = (id, v) => { const el=document.getElementById(id); if (el && v != null) el.textContent=`上次：${v}`; };
+  h('h-stu', d.stu); h('h-stuAdd', d.stuAdd); h('h-stuSub', d.stuSub);
+  h('h-revGoal', d.revGoal); h('h-ldw', d.ldw);
+  h('h-mtd', d.mtd); h('h-clsGoal', d.clsGoal);
+  h('h-clsToday', d.clsToday); h('h-clsMtd', d.clsMtd);
+  h('h-clsNext', d.clsNext); h('h-booked', d.booked);
+  h('h-fa1', d.fa1); h('h-fa2', d.fa2); h('h-fa3', d.fa3);
+}
+
+function savePersonalFormData(d) {
+  const prev = storage.getItem(SK_FORM);
+  if (prev) storage.setItem(SK_FORM_P, prev);
+  storage.setItem(SK_FORM, JSON.stringify(d));
+  lastFormData = d;
+}
+
+function undoPersonalForm() {
+  const raw = storage.getItem(SK_FORM_P);
+  if (!raw) { alert('沒有可還原的紀錄'); return; }
+  const d = JSON.parse(raw);
+  fillFormFromData(d);
+  updateHints(d);
+}
+
+function autoCalcMtd() {
+  if (mtdManual) return;
+  const ldw = parseInt(document.getElementById('ldw').value) || 0;
+  const base = lastFormData?.mtd || 0;
+  document.getElementById('mtd').value = base + ldw;
+}
+
+function autoCalcClsMtd() {
+  if (clsMtdManual) return;
+  const ct  = parseInt(document.getElementById('clsToday').value) || 0;
+  const base = lastFormData?.clsMtd || 0;
+  document.getElementById('clsMtd').value = base + ct;
+}
+
+function autoCalcStu() {
+  if (stuManual) return;
+  /* stuBase = 月初基數；若舊資料沒有 stuBase，用 stu 作為 fallback */
+  const base = lastFormData?.stuBase ?? lastFormData?.stu ?? 0;
+  const add  = parseInt(document.getElementById('stuAdd').value) || 0;
+  const sub  = parseInt(document.getElementById('stuSub').value) || 0;
+  document.getElementById('stu').value = base + add - sub;
+}
+
+function monthStartReset() {
+  if (!confirm('月初重置：MTD業績、課堂總數、LDW、已約堂數、FA數等將歸零，學生(+)(-)歸零並以當前學生總數為新月初基數。確定？')) return;
+  const currentStu = parseInt(document.getElementById('stu').value) || 0;
+  document.getElementById('mtd').value      = '';
+  document.getElementById('ldw').value      = '';
+  document.getElementById('clsMtd').value   = '';
+  document.getElementById('clsToday').value = '';
+  document.getElementById('stuAdd').value   = '';
+  document.getElementById('stuSub').value   = '';
+  document.getElementById('booked').value   = '';
+  document.getElementById('fa1').value      = '';
+  document.getElementById('fa2').value      = '';
+  mtdManual = false; clsMtdManual = false; stuManual = false;
+  const d = {
+    stuBase: currentStu,   /* 新月初學生基數 */
+    stu: currentStu,
+    stuAdd: 0, stuSub: 0,
+    revGoal: parseAmount(document.getElementById('revGoal').value),
+    clsGoal: parseInt(document.getElementById('clsGoal').value) || 0,
+    clsNext: parseInt(document.getElementById('clsNext').value) || 0,
+    fa3: parseInt(document.getElementById('fa3').value) || 0,
+    mtd: 0, ldw: 0, clsMtd: 0, clsToday: 0, booked: 0, fa1: 0, fa2: 0,
+  };
+  savePersonalFormData(d);
+  updateHints(d);
+}
+
+/* ════════════════════════════════════════
+   Personal report calculate
+════════════════════════════════════════ */
+function calculate() {
+  const dateStr = document.getElementById('rptDate').value;
+  if (!dateStr) { alert('請填入報表日期'); return; }
+  const p = dateStr.split('-');
+  const year = parseInt(p[0]), month = parseInt(p[1]), day = parseInt(p[2]);
+  const totalDays = daysInMonth(year, month);
+  const daysPassed = day, daysLeft = totalDays - day;
+
+  const stu      = parseInt(document.getElementById('stu').value)      || 0;
+  const stuAdd   = parseInt(document.getElementById('stuAdd').value)   || 0;
+  const stuSub   = parseInt(document.getElementById('stuSub').value)   || 0;
+  const revGoal  = parseAmount(document.getElementById('revGoal').value);
+  const ldw      = parseInt(document.getElementById('ldw').value)      || 0;
+  const mtd      = parseInt(document.getElementById('mtd').value)      || 0;
+  const clsGoal  = parseInt(document.getElementById('clsGoal').value)  || 0;
+  const clsToday = parseInt(document.getElementById('clsToday').value) || 0;
+  const clsMtd   = parseInt(document.getElementById('clsMtd').value)   || 0;
+  const clsNext  = parseInt(document.getElementById('clsNext').value)  || 0;
+  const booked   = parseInt(document.getElementById('booked').value)   || 0;
+  const fa1      = parseInt(document.getElementById('fa1').value)      || 0;
+  const fa2      = parseInt(document.getElementById('fa2').value)      || 0;
+  const fa3      = parseInt(document.getElementById('fa3').value)      || 0;
+
+  const proj         = daysPassed > 0 ? Math.floor(mtd / daysPassed * totalDays) : 0;
+  const revPct       = revGoal  > 0 ? Math.floor(proj / revGoal * 100) : 0;
+  const dailyNeedRev = daysLeft  > 0 ? Math.ceil((revGoal - mtd) / daysLeft) : 0;
+  const clsProj      = daysPassed > 0 ? Math.floor(clsMtd / daysPassed * totalDays) : 0;
+  const classPct     = clsGoal > 0 ? Math.floor(clsProj / clsGoal * 100) : 0;
+  const dailyNeedCls = daysLeft  > 0 ? Math.ceil((clsGoal - clsMtd) / daysLeft) : 0;
+  const bookedPct    = clsGoal > 0 ? Math.floor(booked / clsGoal * 100) : 0;
+
+  personalData = { mtd, revGoal, proj, ldw, clsMtd, clsToday, booked, clsGoal,
+                   stu, stuAdd, stuSub, fa1, fa2, fa3, daysPassed, totalDays, year, month, day };
+
+  /* Save form state — stuAdd/stuSub 是月累計，不歸零；stuBase 保留月初基數 */
+  const formSnap = {
+    stuBase: lastFormData?.stuBase ?? (stu - stuAdd + stuSub),  /* 月初基數，月初重置時才更新 */
+    stu, stuAdd, stuSub,
+    revGoal, ldw, mtd, clsGoal, clsToday, clsMtd, clsNext, booked, fa1, fa2, fa3,
+  };
+  savePersonalFormData(formSnap);
+  updateHints(formSnap);
+
+  document.getElementById('resultGrid').innerHTML =
+    ri('PROJ', proj, 'highlight') +
+    ri('業績%數', revPct+'%', revPct>=100?'highlight':revPct<80?'warn':'') +
+    ri('業績 Daily need', dailyNeedRev) +
+    ri('課堂 PROJ', clsProj, 'highlight') +
+    ri('課堂%數', classPct+'%', classPct>=100?'highlight':classPct<80?'warn':'') +
+    ri('課堂 Daily need', dailyNeedCls) +
+    ri('已約堂數%', bookedPct+'%');
+
+  const dateLabel = pad2(month) + '/' + pad2(day);
+  const suffix    = stuSuffix(stuAdd, stuSub);
+  const report =
+`${dateLabel}
+——--
+學生數量：${stu}${suffix}
+業績目標：${revGoal}
+課堂目標：${clsGoal}
+—————
+今日結束總業績
+LDW：${ldw}
+MTD：${mtd}
+PROJ：${proj}
+業績%數：${revPct}%
+Daily need：${dailyNeedRev}
+—————
+今日結束總課堂
+今日課堂：${clsToday}
+課堂總數：${clsMtd}
+課堂%數：${classPct}%
+下次上班課堂：${clsNext}
+Daily need：${dailyNeedCls}
+————
+已約堂數/目標堂數/學生數量
+${booked}/${clsGoal}/${stu}${suffix} / ${bookedPct}%
+一一一一一一
+成交FA數/已約來FA數/FA目標
+${fa1}/${fa2}/${fa3}`;
+
+  document.getElementById('reportText').textContent = report;
+  const card = document.getElementById('resultCard');
+  card.classList.add('visible');
+  card.scrollIntoView({ behavior:'smooth', block:'start' });
+  document.getElementById('copyBtn').textContent = '複製報表文字';
+  document.getElementById('copyBtn').classList.remove('copied');
+  document.getElementById('saveHistBtn').textContent = '儲存到趨勢紀錄';
+  document.getElementById('saveHistBtn').classList.remove('saved');
+}
+
+function copyReport() { copyText(document.getElementById('reportText').textContent, 'copyBtn', '複製報表文字'); }
+
+/* ════════════════════════════════════════
+   Group report
+════════════════════════════════════════ */
+function showGroupError(msg) { const el=document.getElementById('groupError'); el.textContent=msg; el.classList.add('visible'); }
+function hideGroupError()    { document.getElementById('groupError').classList.remove('visible'); }
+
+function getGroupDateMMDD() {
+  const v = document.getElementById('rptDate').value;
+  if (v) { const p=v.split('-'); return pad2(parseInt(p[1]))+'/'+pad2(parseInt(p[2])); }
+  const n=new Date(); return pad2(n.getMonth()+1)+'/'+pad2(n.getDate());
+}
+
+function makeGroupReport(inputText, pd) {
+  const lines=inputText.split('\n'), out=[];
+  let state='header', grStr='', grNum=0, gcNum=0, totRev=0, totCls=0;
+  const isSep=s=>/^[—\-]{4,}/.test(s.trim());
+  const isPL=s=>/^[A-Za-z]+\s*[:：]/.test(s.trim());
+  const myName=getMyName();
+  const esc=myName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const isMe=s=>myName?new RegExp('^'+esc+'\\s*[:：]','i').test(s.trim()):false;
+  const myRev=()=>{ const pct=pd.revGoal>0?Math.floor(pd.proj/pd.revGoal*100):0; return `${myName} : ${pd.mtd}/ ${pd.revGoal}/ ${pct}%`; };
+  const myCls=()=>{ const s=stuSuffix(pd.stuAdd,pd.stuSub); return `${myName} : ${pd.booked}/ ${pd.clsGoal} / ${pd.stu}${s}`; };
+  const myFa =()=>`${myName}: ${pd.fa1}/ ${pd.fa2}/ ${pd.fa3}`;
+
+  lines.forEach((line,i)=>{
+    const t=line.trim();
+    if (i===0) { out.push(getGroupDateMMDD()); return; }
+    if (i===2) {
+      const parts=t.split(/[\/／]/);
+      if (parts.length>=2) { grStr=parts[0].trim(); grNum=parseAmount(grStr); gcNum=parseInt(parts[1].replace(/[^\d]/g,''))||0; }
+      out.push(line); return;
+    }
+    if (t.includes('已約到堂數/目標堂數/學生總數')) { state='cls'; out.push(line); return; }
+    if (/成交[Ff][Aa]數/.test(t))                  { state='fa';  out.push(line); return; }
+    if (isSep(line)) {
+      if      (state==='rev')    state='revSum';
+      else if (state==='revSum') state='inter';
+      else if (state==='cls')    state='clsSum';
+      else if (state==='clsSum') state='inter2';
+      out.push(line); return;
+    }
+    if (state==='header' && isPL(t)) state='rev';
+    switch(state) {
+      case 'rev':
+        if (isMe(t)) { out.push(myRev()); totRev+=pd.mtd; }
+        else { const m=t.match(/[:：]\s*(\d+)/); if(m) totRev+=parseInt(m[1]); out.push(line); }
+        break;
+      case 'revSum':
+        if (/^\d+[／\/]/.test(t)) { const d=t.includes('／')?'／':'/'; out.push(`${totRev}${d}${grStr}`); }
+        else if (/^業績%數：/.test(t)) {
+          const gp=pd.daysPassed>0?Math.floor(totRev/pd.daysPassed*pd.totalDays):totRev;
+          out.push(`業績%數：${grNum>0?Math.floor(gp/grNum*100):0}%`);
+        } else out.push(line);
+        break;
+      case 'cls':
+        if (isMe(t)) { out.push(myCls()); totCls+=pd.booked; }
+        else { const m=t.match(/[:：]\s*(\d+)/); if(m) totCls+=parseInt(m[1]); out.push(line); }
+        break;
+      case 'clsSum':
+        if (/^\d+堂/.test(t)) out.push(`${totCls}堂/ ${gcNum}堂`);
+        else if (/^達成%數：/.test(t)) out.push(`達成%數：${gcNum>0?Math.floor(totCls/gcNum*100):0}%`);
+        else out.push(line);
+        break;
+      case 'fa': out.push(isMe(t)?myFa():line); break;
+      default:   out.push(line);
+    }
+  });
+  return out.join('\n');
+}
+
+function processGroup() {
+  if (!getMyName()) { showGroupError('請先點擊右上角 ⚙ 設定你的名字。'); return; }
+  if (!personalData) { showGroupError('請先在「個人報表」計算完畢。'); return; }
+  const input=document.getElementById('groupInput').value;
+  if (!input.trim()) { showGroupError('請貼入前次小組報表文字。'); return; }
+  hideGroupError();
+  const result=makeGroupReport(input, personalData);
+  document.getElementById('groupReportText').textContent=result;
+  const card=document.getElementById('groupResultCard');
+  card.classList.add('visible');
+  card.scrollIntoView({ behavior:'smooth', block:'start' });
+  document.getElementById('groupCopyBtn').textContent='複製小組報表';
+  document.getElementById('groupCopyBtn').classList.remove('copied');
+  syncGroupReportToTeam(result);
+  if (document.getElementById('tab-trend').classList.contains('active') && currentSub==='team') {
+    renderMemberFilter(); renderTeamChart();
+  }
+}
+function copyGroupReport() { copyText(document.getElementById('groupReportText').textContent,'groupCopyBtn','複製小組報表'); }
+
+/* ════════════════════════════════════════
+   Personal trend
+════════════════════════════════════════ */
+function saveToHistory() {
+  if (!personalData) { alert('請先計算個人報表'); return; }
+  const hist=JSON.parse(storage.getItem(SK_HIST)||'[]');
+  const date=getGroupDateMMDD();
+  const entry={ date, year:personalData.year, ldw:personalData.ldw,
+                revMtd:personalData.mtd, revGoal:personalData.revGoal,
+                booked:personalData.booked, clsMtd:personalData.clsMtd,
+                clsGoal:personalData.clsGoal, clsToday:personalData.clsToday };
+  const idx=hist.findIndex(h=>h.date===date);
+  if (idx>=0) hist.splice(idx,1,entry); else hist.push(entry);
+  hist.sort((a,b)=>a.date.localeCompare(b.date));
+  storage.setItem(SK_HIST, JSON.stringify(hist));
+
+  /* Sync to team */
+  const myName=getMyName();
+  if (myName) {
+    const members=getTeamMembers();
+    const matched=members.find(m=>m.trim().toLowerCase()===myName.toLowerCase());
+    if (matched) {
+      const td=getTeamData();
+      if (!td[matched]) td[matched]={};
+      const prev=td[matched][date]||{};
+      td[matched][date]={ mtd:personalData.mtd, booked:personalData.booked, cls:prev.cls||0, year:personalData.year };
+      saveTeamData(td);
+    }
+  }
+
+  const btn=document.getElementById('saveHistBtn');
+  btn.textContent='已儲存！'; btn.classList.add('saved');
+  setTimeout(()=>{ btn.textContent='儲存到趨勢紀錄'; btn.classList.remove('saved'); },2000);
+  if (document.getElementById('tab-trend').classList.contains('active') && currentSub==='personal') renderTrend();
+}
+
+function setPersonalScale(s) {
+  personalScale=s;
+  document.querySelectorAll('#personalScaleCtrl .scale-btn').forEach(b=>b.classList.toggle('active',b.dataset.scale===s));
+  renderTrend();
+}
+function setPersonalMode(m) {
+  personalMode=m;
+  document.querySelectorAll('#personalScaleCtrl .mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+  renderTrend();
+}
+function resetPersonalZoom() { if (trendChartInst) trendChartInst.resetZoom(); }
+
+function switchTrend(type) {
+  trendMode=type;
+  document.querySelectorAll('#subPersonal .trend-toggle-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===type));
+  document.getElementById('trendChartTitle').textContent= type==='rev'?'業績趨勢':'已約課堂趨勢';
+  renderTrend();
+}
+
+function groupByScale(entries, scale) {
+  const buckets=new Map();
+  entries.forEach(e=>{
+    const year=e.year||new Date().getFullYear();
+    const [mm,dd]=(e.date||'01/01').split('/').map(Number);
+    let key,label;
+    if (scale==='week') {
+      const d=new Date(year,mm-1,dd);
+      const sun=new Date(d); sun.setDate(d.getDate()-d.getDay());
+      key=sun.toISOString().slice(0,10);
+      label=pad2(sun.getMonth()+1)+'/'+pad2(sun.getDate());
+    } else if (scale==='month') {
+      key=`${year}-${pad2(mm)}`; label=`${year}/${pad2(mm)}`;
+    } else {
+      key=`${year}`; label=`${year}`;
+    }
+    if (!buckets.has(key)) buckets.set(key,{key,label,ldwSum:0,lastMtd:0,lastBooked:0,lastGoal:0});
+    const b=buckets.get(key);
+    b.ldwSum+=(e.ldw||0);
+    b.lastMtd=e.revMtd||e.mtd||0;
+    b.lastBooked=e.booked||0;
+    b.lastGoal=e.revGoal||0;
+  });
+  return [...buckets.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([,v])=>v);
+}
+
+function buildPersonalChartData(hist) {
+  if (!hist.length) return null;
+  if (trendMode==='rev') {
+    if (personalScale==='day') {
+      return {
+        labels: hist.map(h=>h.date),
+        datasets:[
+          { label:'MTD 累計', data:hist.map(h=>h.revMtd),  borderColor:'#22c55e', tension:.35, fill:false, pointRadius:4, pointHoverRadius:6, backgroundColor:'rgba(34,197,94,.07)' },
+          { label:'當日 LDW', data:hist.map(h=>h.ldw),      borderColor:'#f97316', tension:.35, fill:false, pointRadius:4, pointHoverRadius:6, backgroundColor:'rgba(249,115,22,.07)' },
+          { label:'目標',     data:hist.map(h=>h.revGoal),  borderColor:'#3d3d3d', borderDash:[6,4], borderWidth:1.5, pointRadius:0, fill:false },
+        ],
+        milestones:true,
+      };
+    }
+    const grps=groupByScale(hist, personalScale);
+    if (personalMode==='cumulative') {
+      let cum=0;
+      return {
+        labels:grps.map(g=>g.label),
+        datasets:[
+          { label:'累計業績', data:grps.map(g=>{cum+=g.ldwSum;return cum;}), borderColor:'#22c55e', tension:.3, fill:false, pointRadius:4, pointHoverRadius:6 },
+          { label:'當期業績', data:grps.map(g=>g.ldwSum), borderColor:'#f97316', tension:.3, fill:false, pointRadius:4, pointHoverRadius:6 },
+        ],
+        milestones:true,
+      };
+    } else {
+      return {
+        labels:grps.map(g=>g.label),
+        datasets:[
+          { label:'當期業績', data:grps.map(g=>g.ldwSum), borderColor:'#22c55e', tension:.3, fill:false, pointRadius:4, pointHoverRadius:6 },
+        ],
+        milestones:true,
+      };
+    }
+  } else {
+    /* booked */
+    if (personalScale==='day') {
+      return {
+        labels:hist.map(h=>h.date),
+        datasets:[{ label:'已約堂數', data:hist.map(h=>h.booked||0), borderColor:'#5ba3f5', tension:.35, fill:false, pointRadius:4, pointHoverRadius:6 }],
+        milestones:false,
+      };
+    }
+    const grps=groupByScale(hist, personalScale);
+    return {
+      labels:grps.map(g=>g.label),
+      datasets:[{ label:'已約堂數', data:grps.map(g=>g.lastBooked), borderColor:'#5ba3f5', tension:.3, fill:false, pointRadius:4, pointHoverRadius:6 }],
+      milestones:false,
+    };
+  }
+}
+
+function renderTrend() {
+  const hist=JSON.parse(storage.getItem(SK_HIST)||'[]');
+  console.log('[renderTrend] entries:', hist.length, 'scale:', personalScale, 'mode:', personalMode);
+  const emptyEl=document.getElementById('trendEmpty');
+  const chartCard=document.getElementById('trendChartCard');
+  const histCard=document.getElementById('trendHistCard');
+  if (!hist.length) {
+    emptyEl.style.display='block'; chartCard.style.display='none'; histCard.style.display='none';
+    if (trendChartInst) { trendChartInst.destroy(); trendChartInst=null; }
+    return;
+  }
+  emptyEl.style.display='none'; chartCard.style.display='block'; histCard.style.display='block';
+  const cd=buildPersonalChartData(hist);
+  if (!cd) return;
+  if (trendChartInst) { trendChartInst.destroy(); trendChartInst=null; }
+  try {
+    trendChartInst=new Chart(document.getElementById('trendCanvas').getContext('2d'),{
+      type:'line', data:{ labels:cd.labels, datasets:cd.datasets },
+      options:buildChartOptions({ zoom:true, milestones:cd.milestones }),
+    });
+    console.log('[renderTrend] chart OK, points:', cd.labels.length);
+  } catch(e) { console.error('[renderTrend]', e); }
+  document.getElementById('historyList').innerHTML=hist.map((h,i)=>
+    `<div class="hist-item">
+      <span class="hist-date">${h.date}</span>
+      <span class="hist-stats">業績 ${h.revMtd}／${h.revGoal}　LDW ${h.ldw}　已約 ${h.booked||0}</span>
+      <button class="hist-del" onclick="deleteHistory(${i})">✕</button>
+    </div>`).join('');
+}
+function deleteHistory(idx) {
+  const hist=JSON.parse(storage.getItem(SK_HIST)||'[]');
+  hist.splice(idx,1); storage.setItem(SK_HIST,JSON.stringify(hist)); renderTrend();
+}
+function clearAllHistory() {
+  if (!confirm('確定清除所有個人趨勢紀錄？')) return;
+  storage.removeItem(SK_HIST); renderTrend();
+}
+
+/* ════════════════════════════════════════
+   Team management
+════════════════════════════════════════ */
+function getTeamMembers() {
+  const s=storage.getItem(SK_MEMBERS);
+  if (!s) { const d=[...DEFAULT_MEMBERS]; storage.setItem(SK_MEMBERS,JSON.stringify(d)); return d; }
+  return JSON.parse(s);
+}
+function saveTeamMembers(m) { storage.setItem(SK_MEMBERS,JSON.stringify(m)); }
+function getTeamData()      { const s=storage.getItem(SK_TDATA); return s?JSON.parse(s):{}; }
+function saveTeamData(d)    { storage.setItem(SK_TDATA,JSON.stringify(d)); }
+function resetTeamData()    { if (!confirm('確定清除所有小組趨勢數據？')) return; storage.removeItem(SK_TDATA); renderTeamChart(); }
+
+function addMember() {
+  const input=document.getElementById('newMemberInput');
+  const name=input.value.trim(); if (!name) return;
+  const members=getTeamMembers();
+  if (members.some(m=>m.toLowerCase()===name.toLowerCase())) { alert('成員已存在'); return; }
+  members.push(name); saveTeamMembers(members); selectedMembers.add(name);
+  input.value=''; renderMemberList(); renderEntryGrid(); renderMemberFilter();
+}
+function removeMember(name) {
+  if (!confirm(`確定移除「${name}」？儲存的數據不會被刪除。`)) return;
+  const members=getTeamMembers().filter(m=>m!==name); saveTeamMembers(members);
+  selectedMembers.delete(name); renderMemberList(); renderEntryGrid(); renderMemberFilter(); renderTeamChart();
+}
+function renderMemberList() {
+  const members=getTeamMembers();
+  document.getElementById('memberListEl').innerHTML=members.map((name,idx)=>
+    `<div class="member-list-row">
+      <div style="width:8px;height:8px;border-radius:50%;background:${getMemberColor(idx)};flex-shrink:0;"></div>
+      <span class="member-list-name">${name}</span>
+      <button class="member-list-del" onclick="removeMember('${name.replace(/'/g,"\\'")}')">✕</button>
+    </div>`).join('');
+}
+function renderEntryGrid() {
+  const members=getTeamMembers(), td=getTeamData();
+  const date=document.getElementById('teamEntryDate').value, mmdd=dateValToMMDD(date);
+  const header=`<div class="entry-header"><span></span><span>MTD業績</span><span>已約課堂</span></div>`;
+  const rows=members.map((name,idx)=>{
+    const color=getMemberColor(idx), ex=(td[name]&&mmdd&&td[name][mmdd])||{};
+    return `<div class="entry-row">
+      <div class="entry-name"><div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></div><span>${name}</span></div>
+      <input type="number" class="entry-input" id="te_mtd_${idx}"    placeholder="0" min="0" value="${ex.mtd    !=null?ex.mtd:''}">
+      <input type="number" class="entry-input" id="te_booked_${idx}" placeholder="0" min="0" value="${ex.booked !=null?ex.booked:''}">
+    </div>`;
+  }).join('');
+  document.getElementById('teamEntryGrid').innerHTML=header+rows;
+}
+function saveTeamEntry() {
+  const members=getTeamMembers(), date=document.getElementById('teamEntryDate').value;
+  if (!date) { alert('請選擇日期'); return; }
+  const mmdd=dateValToMMDD(date), year=parseInt(date.split('-')[0]), td=getTeamData();
+  members.forEach((name,idx)=>{
+    const mtd=parseInt(document.getElementById(`te_mtd_${idx}`).value)||0;
+    const booked=parseInt(document.getElementById(`te_booked_${idx}`).value)||0;
+    if (mtd||booked) { if(!td[name])td[name]={}; td[name][mmdd]={ mtd, booked, cls:0, year }; }
+  });
+  saveTeamData(td);
+  const btn=document.getElementById('teamSaveBtn');
+  btn.textContent='已儲存！'; setTimeout(()=>btn.textContent='儲存此日數據',2000);
+  if (currentSub==='team') renderTeamChart();
+}
+
+/* ════════════════════════════════════════
+   Team trend
+════════════════════════════════════════ */
+function switchSub(name) {
+  currentSub=name;
+  document.querySelectorAll('.subbtn').forEach((btn,i)=>btn.classList.toggle('active',['personal','team','manage'][i]===name));
+  document.getElementById('subPersonal').style.display=name==='personal'?'block':'none';
+  document.getElementById('subTeam').style.display     =name==='team'    ?'block':'none';
+  document.getElementById('subManage').style.display   =name==='manage'  ?'block':'none';
+  refreshCurrentSub();
+}
+function switchTeamChart(type) {
+  teamChartType=type;
+  const titles={mtd:'業績趨勢',booked:'已約課堂趨勢'};
+  document.getElementById('teamChartTitle').textContent=titles[type]||'';
+  document.querySelectorAll('#subTeam .trend-toggle-btn').forEach(b=>b.classList.toggle('active',b.dataset.type===type));
+  renderTeamChart();
+}
+function setTeamScale(s) {
+  teamScale=s;
+  document.querySelectorAll('#teamScaleCtrl .scale-btn').forEach(b=>b.classList.toggle('active',b.dataset.scale===s));
+  renderTeamChart();
+}
+function setTeamMode(m) {
+  teamMode=m;
+  document.querySelectorAll('#teamScaleCtrl .mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+  renderTeamChart();
+}
+function resetTeamZoom() { if (teamChartInst) teamChartInst.resetZoom(); }
+
+function renderMemberFilter() {
+  const members=getTeamMembers();
+  document.getElementById('memberFilter').innerHTML=members.map((name,idx)=>{
+    const color=getMemberColor(idx), active=selectedMembers.has(name);
+    return `<div class="member-chip ${active?'active':''}" style="--chip-color:${color}" onclick="toggleMember('${name.replace(/'/g,"\\'")}')">
+      ${name}
+    </div>`;
+  }).join('');
+}
+function toggleMember(name) {
+  if (selectedMembers.has(name)) selectedMembers.delete(name); else selectedMembers.add(name);
+  renderMemberFilter(); renderTeamChart();
+}
+
+function buildTeamGrouped(memberData, scale, mode) {
+  const entries=Object.entries(memberData).map(([date,v])=>({...v,date}));
+  if (!entries.length) return { labels:[], values:[] };
+  if (scale==='day') {
+    return { labels:entries.map(e=>e.date), values:entries };
+  }
+  const grps=groupByScale(entries.map(e=>({...e, revMtd:e.mtd, ldw:0, booked:e.booked||0})), scale);
+  if (mode==='cumulative') {
+    let cum=0;
+    return { labels:grps.map(g=>g.label), values:grps.map(g=>{ cum+=g.ldwSum; return { ...g, cumMtd:cum }; }) };
+  }
+  return { labels:grps.map(g=>g.label), values:grps };
+}
+
+function renderTeamChart() {
+  const members=getTeamMembers(), td=getTeamData();
+  console.log('[renderTeamChart] members:',members,'td keys:',Object.keys(td));
+  const dateSet=new Set();
+  members.forEach(m=>{ if(td[m]) Object.keys(td[m]).forEach(d=>dateSet.add(d)); });
+  const allDates=[...dateSet].sort();
+  const emptyEl=document.getElementById('teamEmpty');
+  const chartCard=document.getElementById('teamChartCard');
+  const sumCard=document.getElementById('teamSummaryCard');
+  if (!allDates.length) {
+    emptyEl.style.display='block'; chartCard.style.display='none'; sumCard.style.display='none';
+    if (teamChartInst){teamChartInst.destroy();teamChartInst=null;} return;
+  }
+  emptyEl.style.display='none'; chartCard.style.display='block'; sumCard.style.display='block';
+
+  let globalLabels=[];
+  const datasets=[];
+  const isRev=teamChartType==='mtd';
+
+  members.filter(name=>selectedMembers.has(name)).forEach(name=>{
+    const idx=members.indexOf(name), color=getMemberColor(idx);
+    const memberData=td[name]||{};
+    if (teamScale==='day') {
+      if (!globalLabels.length) globalLabels=allDates;
+      const data=allDates.map(d=>{
+        if (!memberData[d]) return null;
+        return isRev ? memberData[d].mtd : memberData[d].booked;
+      });
+      datasets.push({ label:name, data, borderColor:color, backgroundColor:color+'18', tension:.35, fill:false, pointRadius:4, pointHoverRadius:6, spanGaps:true });
+    } else {
+      const entries=Object.entries(memberData).map(([date,v])=>({...v,date,revMtd:v.mtd,ldw:0}));
+      const grps=groupByScale(entries, teamScale);
+      if (!globalLabels.length) globalLabels=grps.map(g=>g.label);
+      const valFn=isRev?(teamMode==='cumulative'?((()=>{let c=0;return g=>{c+=g.ldwSum;return c;};})()):(g=>g.lastMtd)):(g=>g.lastBooked);
+      datasets.push({ label:name, data:grps.map(valFn), borderColor:color, backgroundColor:color+'18', tension:.3, fill:false, pointRadius:4, pointHoverRadius:6, spanGaps:true });
+    }
+  });
+
+  if (!globalLabels.length && allDates.length) globalLabels=allDates;
+  if (teamChartInst){teamChartInst.destroy();teamChartInst=null;}
+  try {
+    teamChartInst=new Chart(document.getElementById('teamCanvas').getContext('2d'),{
+      type:'line', data:{ labels:globalLabels, datasets },
+      options:buildChartOptions({ zoom:true, milestones:isRev }),
+    });
+    console.log('[renderTeamChart] OK, dates:',globalLabels.length,'sets:',datasets.length);
+  } catch(e){console.error('[renderTeamChart]',e);}
+
+  renderMemberFilter();
+
+  /* Summary cards */
+  document.getElementById('teamSummary').innerHTML=members.map((name,idx)=>{
+    const color=getMemberColor(idx), memberData=td[name]||{};
+    const dates=Object.keys(memberData).sort();
+    if (!dates.length) return `<div class="summary-card" style="--card-color:${color}"><div class="summary-name">${name}</div><div class="summary-date">尚無數據</div></div>`;
+    const last=memberData[dates[dates.length-1]];
+    return `<div class="summary-card" style="--card-color:${color}">
+      <div class="summary-name">${name}</div>
+      <div class="summary-date">最後：${dates[dates.length-1]}</div>
+      <div class="summary-stat">業績 MTD <strong>${last.mtd||0}</strong><br>已約堂數 <strong>${last.booked||0}</strong></div>
+    </div>`;
+  }).join('');
+}
+
+/* ════════════════════════════════════════
+   Group report → team sync
+════════════════════════════════════════ */
+function parseGroupReportData(text) {
+  const lines=text.split('\n'); const parsed={};
+  let date='', state='header';
+  const isSep=s=>/^[—\-]{4,}/.test(s.trim());
+  const isPL=s=>/^[A-Za-z]+\s*[:：]/.test(s.trim());
+  lines.forEach((line,i)=>{
+    const t=line.trim();
+    if (i===0) { date=t; return; }
+    if (t.includes('已約到堂數/目標堂數/學生總數')) { state='cls'; return; }
+    if (/成交[Ff][Aa]數/.test(t)) { state='fa'; return; }
+    if (isSep(line)) {
+      if(state==='rev') state='revSum';
+      else if(state==='revSum') state='inter';
+      else if(state==='cls') state='clsSum';
+      return;
+    }
+    if (state==='header' && isPL(t)) state='rev';
+    if ((state==='rev'||state==='cls') && isPL(t)) {
+      const nm=t.match(/^([A-Za-z]+)\s*[:：]/); if(!nm) return;
+      const name=nm[1]; if(!parsed[name]) parsed[name]={mtd:0,booked:0};
+      if (state==='rev') { const n=t.match(/[:：]\s*([\d.]+[萬万Ww]?)/); if(n) parsed[name].mtd=parseAmount(n[1]); }
+      else               { const n=t.match(/[:：]\s*(\d+)/);              if(n) parsed[name].booked=parseInt(n[1]); }
+    }
+  });
+  return { date, parsed };
+}
+
+function syncGroupReportToTeam(reportText) {
+  const { date, parsed }=parseGroupReportData(reportText);
+  if (!date||!Object.keys(parsed).length) return;
+  const members=getTeamMembers();
+  Object.keys(parsed).forEach(name=>{
+    if (!members.some(m=>m.toLowerCase()===name.toLowerCase())) {
+      members.push(name); selectedMembers.add(name);
+    }
+  });
+  saveTeamMembers(members);
+  const td=getTeamData();
+  Object.entries(parsed).forEach(([name,data])=>{
+    const canon=members.find(m=>m.toLowerCase()===name.toLowerCase())||name;
+    if (!td[canon]) td[canon]={};
+    const prev=td[canon][date]||{};
+    td[canon][date]={ mtd:data.mtd, booked:data.booked, cls:prev.cls||0 };
+  });
+  saveTeamData(td);
+  console.log('[sync] date:',date,'members:',Object.keys(parsed).join(', '));
+}
+
+/* ════════════════════════════════════════
+   Milestone annotation plugin
+════════════════════════════════════════ */
+const milestonePlugin = {
+  id:'milestones',
+  beforeDraw(chart) {
+    if (!chart.options?.plugins?.milestones?.enabled) return;
+    const {ctx, chartArea, scales}=chart;
+    if (!chartArea||!scales.y) return;
+    const yMin=scales.y.min, yMax=scales.y.max;
+    const {left,right,top,bottom}=chartArea;
+    ctx.save();
+    /* Zone backgrounds */
+    const zoneEdges=[0,...MILESTONES, Infinity];
+    for (let i=0; i<zoneEdges.length-1; i++) {
+      const lo=zoneEdges[i], hi=zoneEdges[i+1];
+      if (hi<=yMin||lo>=yMax) continue;
+      const y1=scales.y.getPixelForValue(Math.min(Math.max(lo,yMin),yMax));
+      const y2=scales.y.getPixelForValue(Math.min(Math.max(hi===Infinity?yMax:hi,yMin),yMax));
+      ctx.fillStyle=MS_COLORS[i]||'rgba(140,140,130,.08)';
+      ctx.fillRect(left, Math.min(y1,y2), right-left, Math.abs(y2-y1));
+    }
+    /* Dashed lines + labels */
+    ctx.font='10px Microsoft JhengHei,Segoe UI,sans-serif';
+    ctx.textAlign='right'; ctx.textBaseline='bottom';
+    MILESTONES.forEach((val,i)=>{
+      if (val<yMin||val>yMax) return;
+      const y=scales.y.getPixelForValue(val);
+      ctx.strokeStyle='rgba(160,160,160,.25)'; ctx.lineWidth=1;
+      ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(right,y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='rgba(190,190,190,.6)';
+      ctx.fillText(MS_LABELS[i], right-4, y-1);
+    });
+    ctx.restore();
+  }
+};
+Chart.register(milestonePlugin);
+
+/* ════════════════════════════════════════
+   Chart options builder
+════════════════════════════════════════ */
+function buildChartOptions({ zoom=false, milestones=false }={}) {
+  const opts={
+    responsive:true, maintainAspectRatio:false,
+    interaction:{ mode:'index', intersect:false },
+    plugins:{
+      legend:{ labels:{ color:'#666', font:{ size:11 }, boxWidth:14, padding:16 } },
+      tooltip:{ backgroundColor:'#1e1e1e', borderColor:'#2e2e2e', borderWidth:1, titleColor:'#e0e0e0', bodyColor:'#999', padding:10 },
+      milestones:{ enabled: milestones },
+    },
+    scales:{
+      x:{ grid:{ color:'#1d1d1d' }, ticks:{ color:'#555', font:{ size:11 } }, border:{ color:'#242424' } },
+      y:{ grid:{ color:'#1d1d1d' }, ticks:{ color:'#555', font:{ size:11 } }, border:{ color:'#242424' } },
+    },
+  };
+  if (zoom) {
+    opts.plugins.zoom={
+      pan:{ enabled:true, mode:'x' },
+      zoom:{ wheel:{ enabled:true, speed:.1 }, pinch:{ enabled:true }, mode:'x' },
+      limits:{ x:{ minRange:1 } },
+    };
+  }
+  return opts;
+}
+
+/* ════════════════════════════════════════
+   Init
+════════════════════════════════════════ */
+(function(){
+  try {
+    const d=new Date(), pad=n=>String(n).padStart(2,'0');
+    const today=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    document.getElementById('rptDate').value=today;
+    document.getElementById('teamEntryDate').value=today;
+    loadSettings();
+    selectedMembers=new Set(getTeamMembers());
+    loadPersonalFormData();
+    console.log('[init] OK | Chart.js:', typeof Chart!=='undefined'?'loaded':'MISSING');
+  } catch(e){
+    console.error('[init] failed:', e);
+  }
+})();
+</script>
+</body>
+</html>
