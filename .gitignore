@@ -1,0 +1,14 @@
+# 只追蹤專案檔案，忽略其他所有內容
+*
+
+# 明確允許的專案檔案
+!.gitignore
+!index.html
+!manifest.json
+!service-worker.js
+!icon-192.png
+!icon-512.png
+!chart.umd.min.js
+!hammer.min.js
+!chartjs-plugin-zoom.min.js
+!README.md

@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="工作機">
+  <meta name="screen-orientation" content="portrait">
   <link rel="apple-touch-icon" href="icon-192.png">
   <!-- 本地 JS（離線可用） -->
   <script src="chart.umd.min.js"></script>
@@ -185,6 +186,20 @@
     .summary-date { font-size:.68rem; color:var(--txt3); margin-bottom:8px; }
     .summary-stat { font-size:.77rem; color:var(--txt2); line-height:1.85; }
     .summary-stat strong { color:var(--txt); font-weight:600; }
+
+    /* 強制直向顯示（橫向時旋轉整個畫面） */
+    @media (orientation: landscape) {
+      body {
+        transform: rotate(-90deg);
+        transform-origin: left top;
+        width: 100vh;
+        height: 100vw;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        overflow-x: hidden;
+      }
+    }
 
     /* Scrollbar */
     ::-webkit-scrollbar { width:6px; height:6px; }
