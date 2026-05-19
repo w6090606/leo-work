@@ -187,20 +187,6 @@
     .summary-stat { font-size:.77rem; color:var(--txt2); line-height:1.85; }
     .summary-stat strong { color:var(--txt); font-weight:600; }
 
-    /* 強制直向顯示（橫向時旋轉整個畫面） */
-    @media (orientation: landscape) {
-      body {
-        transform: rotate(-90deg);
-        transform-origin: left top;
-        width: 100vh;
-        height: 100vw;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        overflow-x: hidden;
-      }
-    }
-
     /* Scrollbar */
     ::-webkit-scrollbar { width:6px; height:6px; }
     ::-webkit-scrollbar-track { background:transparent; }
@@ -497,6 +483,23 @@
 /* ════════════════════════════════════════
    Storage wrapper (file:// fallback)
 ════════════════════════════════════════ */
+/* ── 鎖定直向顯示 ── */
+(function lockPortrait() {
+  function lock() {
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('portrait').catch(() => {});
+    }
+  }
+  lock();
+  window.addEventListener('orientationchange', () => {
+    lock();
+    /* 轉向後讓所有 Chart.js 實例重新計算尺寸 */
+    setTimeout(() => {
+      [trendChartInst, teamChartInst].forEach(c => { if (c) c.resize(); });
+    }, 300);
+  });
+})();
+
 const _mem = {};
 const _ls  = window.localStorage;
 const storage = {
