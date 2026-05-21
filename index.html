@@ -898,11 +898,12 @@ function copyGroupReport() { copyText(document.getElementById('groupReportText')
    歷史數據匯入
 ════════════════════════════════════════ */
 
-/* 以 MM/DD 日期行切割多份報表 */
+/* 以 MM/DD 日期行切割多份報表，並以日期去重（同日保留最後一筆） */
 function splitReports(text) {
   const lines  = text.split('\n');
   const blocks = [];
   let cur      = [];
+
   lines.forEach(line => {
     const t = line.trim();
     if (/^\d{2}\/\d{2}$/.test(t) && cur.length > 0) {
@@ -913,7 +914,16 @@ function splitReports(text) {
     }
   });
   if (cur.length > 0) blocks.push(cur.join('\n'));
-  return blocks.filter(b => b.trim());
+
+  /* 以第一行（日期）為 key 去重，同日只保留最後一筆 */
+  const byDate = new Map();
+  blocks.forEach(b => {
+    if (!b.trim()) return;
+    const dateKey = b.trim().split('\n')[0].trim();
+    byDate.set(dateKey, b);
+  });
+
+  return [...byDate.values()];
 }
 
 /* 解析個人報表格式 */
@@ -989,8 +999,10 @@ function importGroupHistory() {
     }
   });
 
-  hist.sort((a, b) => a.date.localeCompare(b.date));
-  storage.setItem(SK_HIST, JSON.stringify(hist));
+  /* 以日期為 key 去重，同日保留最後寫入的那筆，再排序 */
+  const histMap = new Map(hist.map(h => [h.date, h]));
+  const sortedHist = [...histMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+  storage.setItem(SK_HIST, JSON.stringify(sortedHist));
   saveTeamMembers(members);
   saveTeamData(td);
 
