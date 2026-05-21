@@ -356,20 +356,24 @@
 
 <!-- ═══ 小組報表 ═══ -->
 <section id="tab-group" class="tab-content" role="tabpanel">
+  <div class="subnav" style="margin-bottom:10px;">
+    <button class="subbtn active" id="modeTabUpdate" onclick="switchReportMode('update')">更新今日報表</button>
+    <button class="subbtn"        id="modeTabImport" onclick="switchReportMode('import')">匯入歷史數據</button>
+  </div>
   <div class="form-card">
-    <div class="form-card-title">貼上前次小組報表</div>
-    <p class="group-hint">請先在「個人報表」計算完畢，再貼入前一位同事的小組報表，系統會自動更新你的三行並重算小組總計，同時自動同步數據至趨勢圖。</p>
+    <div class="form-card-title" id="groupCardTitle">更新今日報表</div>
+    <p class="group-hint" id="groupHint">請先在「個人報表」計算完畢，再貼入前一位同事的小組報表，系統會自動更新你的三行並重算小組總計，同時自動同步數據至趨勢圖。</p>
     <div class="form-group">
-      <label>小組報表原文</label>
+      <label>報表內容</label>
       <textarea id="groupInput" class="group-textarea" placeholder="在此貼上同事傳來的小組報表文字…"></textarea>
     </div>
   </div>
   <div class="group-error" id="groupError"></div>
-  <button class="btn-calc" onclick="processGroup()">更新並重算小組總計</button>
+  <button class="btn-calc" id="groupActionBtn" onclick="groupAction()">更新並重算小組總計</button>
   <div class="result-card" id="groupResultCard">
-    <div class="result-card-title">更新後的小組報表</div>
+    <div class="result-card-title" id="groupResultTitle">更新後的小組報表</div>
     <div class="report-pre" id="groupReportText"></div>
-    <button class="btn-copy" id="groupCopyBtn" onclick="copyGroupReport()">複製小組報表</button>
+    <button class="btn-copy" id="groupCopyBtn" onclick="copyGroupReport()" style="display:none;"></button>
   </div>
 </section>
 
@@ -377,46 +381,12 @@
 <section id="tab-trend" class="tab-content" role="tabpanel">
 
   <div class="subnav">
-    <button class="subbtn active" onclick="switchSub('personal')">個人趨勢</button>
-    <button class="subbtn"        onclick="switchSub('team')">小組趨勢</button>
+    <button class="subbtn active" onclick="switchSub('team')">小組趨勢</button>
     <button class="subbtn"        onclick="switchSub('manage')">成員管理</button>
   </div>
 
-  <!-- 個人趨勢 -->
-  <div id="subPersonal">
-    <div class="trend-toggle">
-      <button class="trend-toggle-btn active" data-mode="rev"    onclick="switchTrend('rev')">業績趨勢</button>
-      <button class="trend-toggle-btn"         data-mode="booked" onclick="switchTrend('booked')">已約課堂趨勢</button>
-    </div>
-    <div class="scale-controls" id="personalScaleCtrl">
-      <div class="scale-group">
-        <button class="scale-btn active" data-scale="day"   onclick="setPersonalScale('day')">日</button>
-        <button class="scale-btn"         data-scale="week"  onclick="setPersonalScale('week')">週</button>
-        <button class="scale-btn"         data-scale="month" onclick="setPersonalScale('month')">月</button>
-        <button class="scale-btn"         data-scale="year"  onclick="setPersonalScale('year')">年</button>
-      </div>
-      <div class="scale-group">
-        <button class="mode-btn active" data-mode="monthly"    onclick="setPersonalMode('monthly')">每月重置</button>
-        <button class="mode-btn"         data-mode="cumulative" onclick="setPersonalMode('cumulative')">歷史累加</button>
-      </div>
-    </div>
-    <div class="form-card" id="trendChartCard" style="display:none;">
-      <div class="chart-header">
-        <span class="form-card-title" id="trendChartTitle">業績趨勢</span>
-        <button class="btn-reset-zoom" onclick="resetPersonalZoom()">重置縮放</button>
-      </div>
-      <div class="chart-wrap"><canvas id="trendCanvas"></canvas></div>
-    </div>
-    <div class="trend-empty" id="trendEmpty">尚無個人趨勢紀錄，請在「個人報表」計算後點擊「儲存到趨勢紀錄」。</div>
-    <div class="form-card" id="trendHistCard" style="display:none;">
-      <div class="form-card-title">歷史紀錄</div>
-      <div id="historyList"></div>
-      <button class="btn-danger" onclick="clearAllHistory()">清除所有紀錄</button>
-    </div>
-  </div>
-
   <!-- 小組趨勢 -->
-  <div id="subTeam" style="display:none;">
+  <div id="subTeam">
     <div class="trend-toggle">
       <button class="trend-toggle-btn active" data-type="mtd"    onclick="switchTeamChart('mtd')">業績趨勢</button>
       <button class="trend-toggle-btn"         data-type="booked" onclick="switchTeamChart('booked')">已約課堂趨勢</button>
@@ -426,11 +396,6 @@
         <button class="scale-btn active" data-scale="day"   onclick="setTeamScale('day')">日</button>
         <button class="scale-btn"         data-scale="week"  onclick="setTeamScale('week')">週</button>
         <button class="scale-btn"         data-scale="month" onclick="setTeamScale('month')">月</button>
-        <button class="scale-btn"         data-scale="year"  onclick="setTeamScale('year')">年</button>
-      </div>
-      <div class="scale-group">
-        <button class="mode-btn active" data-mode="monthly"    onclick="setTeamMode('monthly')">每月重置</button>
-        <button class="mode-btn"         data-mode="cumulative" onclick="setTeamMode('cumulative')">歷史累加</button>
       </div>
     </div>
     <div class="trend-empty" id="teamEmpty">尚無小組數據。產生小組報表後自動同步，或至「成員管理」手動輸入。</div>
@@ -545,7 +510,8 @@ let teamChartType   = 'mtd';
 let teamScale       = 'day';
 let teamMode        = 'monthly';
 let selectedMembers = new Set();
-let currentSub      = 'personal';
+let currentSub      = 'team';
+let reportMode      = 'update';  /* 'update' | 'import' */
 
 /* ════════════════════════════════════════
    Settings
@@ -577,9 +543,8 @@ function switchTab(name) {
 }
 
 function refreshCurrentSub() {
-  if      (currentSub === 'personal') renderTrend();
-  else if (currentSub === 'team')     { renderMemberFilter(); renderTeamChart(); }
-  else if (currentSub === 'manage')   { renderMemberList(); renderEntryGrid(); }
+  if      (currentSub === 'team')   { renderMemberFilter(); renderTeamChart(); }
+  else if (currentSub === 'manage') { renderMemberList(); renderEntryGrid(); }
 }
 
 function parseAmount(str) {
@@ -884,6 +849,30 @@ function makeGroupReport(inputText, pd) {
   return out.join('\n');
 }
 
+/* ── 模式切換 ── */
+function switchReportMode(mode) {
+  reportMode = mode;
+  const isImport = mode === 'import';
+  document.getElementById('modeTabUpdate').classList.toggle('active', !isImport);
+  document.getElementById('modeTabImport').classList.toggle('active',  isImport);
+  document.getElementById('groupCardTitle').textContent = isImport ? '匯入歷史數據' : '更新今日報表';
+  document.getElementById('groupHint').textContent = isImport
+    ? '貼上一或多份小組報表（或個人報表），系統自動按日期分割，匯入到趨勢圖。同一天數據直接覆蓋。'
+    : '請先在「個人報表」計算完畢，再貼入前一位同事的小組報表，系統會自動更新你的三行並重算小組總計。';
+  document.getElementById('groupActionBtn').textContent = isImport ? '匯入到趨勢圖' : '更新並重算小組總計';
+  document.getElementById('groupInput').placeholder = isImport
+    ? '貼上一或多份小組報表（或個人報表），系統自動按日期分割匯入…'
+    : '在此貼上同事傳來的小組報表文字…';
+  document.getElementById('groupResultCard').classList.remove('visible');
+  hideGroupError();
+}
+
+/* ── 按鈕分派 ── */
+function groupAction() {
+  if (reportMode === 'import') importGroupHistory();
+  else processGroup();
+}
+
 function processGroup() {
   if (!getMyName()) { showGroupError('請先點擊右上角 ⚙ 設定你的名字。'); return; }
   if (!personalData) { showGroupError('請先在「個人報表」計算完畢。'); return; }
@@ -895,14 +884,135 @@ function processGroup() {
   const card=document.getElementById('groupResultCard');
   card.classList.add('visible');
   card.scrollIntoView({ behavior:'smooth', block:'start' });
-  document.getElementById('groupCopyBtn').textContent='複製小組報表';
-  document.getElementById('groupCopyBtn').classList.remove('copied');
+  document.getElementById('groupResultTitle').textContent = '更新後的小組報表';
+  const copyBtn = document.getElementById('groupCopyBtn');
+  copyBtn.textContent = '複製小組報表'; copyBtn.style.display = ''; copyBtn.classList.remove('copied');
   syncGroupReportToTeam(result);
   if (document.getElementById('tab-trend').classList.contains('active') && currentSub==='team') {
     renderMemberFilter(); renderTeamChart();
   }
 }
 function copyGroupReport() { copyText(document.getElementById('groupReportText').textContent,'groupCopyBtn','複製小組報表'); }
+
+/* ════════════════════════════════════════
+   歷史數據匯入
+════════════════════════════════════════ */
+
+/* 以 MM/DD 日期行切割多份報表 */
+function splitReports(text) {
+  const lines  = text.split('\n');
+  const blocks = [];
+  let cur      = [];
+  lines.forEach(line => {
+    const t = line.trim();
+    if (/^\d{2}\/\d{2}$/.test(t) && cur.length > 0) {
+      blocks.push(cur.join('\n'));
+      cur = [line];
+    } else {
+      cur.push(line);
+    }
+  });
+  if (cur.length > 0) blocks.push(cur.join('\n'));
+  return blocks.filter(b => b.trim());
+}
+
+/* 解析個人報表格式 */
+function parsePersonalReportBlock(block) {
+  const lines = block.split('\n');
+  const date  = lines[0]?.trim() || '';
+  let ldw=0, mtd=0, revGoal=0, clsMtd=0, clsGoal=0, clsToday=0, booked=0;
+  lines.forEach((line, i) => {
+    const t = line.trim();
+    if (t.startsWith('LDW：'))      ldw     = parseInt(t.slice(4))    || 0;
+    if (t.startsWith('MTD：'))      mtd     = parseInt(t.slice(4))    || 0;
+    if (t.startsWith('業績目標：')) revGoal = parseAmount(t.slice(5));
+    if (t.startsWith('課堂總數：')) clsMtd  = parseInt(t.slice(5))    || 0;
+    if (t.startsWith('課堂目標：')) clsGoal = parseInt(t.slice(5))    || 0;
+    if (t.startsWith('今日課堂：')) clsToday= parseInt(t.slice(5))    || 0;
+    if (t.includes('已約堂數/目標堂數/學生數量') && i + 1 < lines.length) {
+      const bm = lines[i+1].trim().match(/^(\d+)/);
+      if (bm) booked = parseInt(bm[1]);
+    }
+  });
+  return { date, ldw, mtd, revGoal, clsMtd, clsGoal, clsToday, booked };
+}
+
+/* 主要匯入函式 */
+function importGroupHistory() {
+  const text = document.getElementById('groupInput').value;
+  if (!text.trim()) { showGroupError('請貼入報表文字。'); return; }
+  hideGroupError();
+
+  const blocks = splitReports(text);
+  if (!blocks.length) { showGroupError('未找到任何報表數據。'); return; }
+
+  const hist    = JSON.parse(storage.getItem(SK_HIST) || '[]');
+  const td      = getTeamData();
+  const members = getTeamMembers();
+
+  let groupCount    = 0;
+  let personalCount = 0;
+
+  blocks.forEach(block => {
+    if (!block.trim()) return;
+    const isPersonal = block.includes('今日結束總業績');
+
+    if (isPersonal) {
+      /* ── 個人報表格式 ── */
+      const r = parsePersonalReportBlock(block);
+      if (!r.date) return;
+      const year = new Date().getFullYear();
+      const entry = { date:r.date, year, ldw:r.ldw, revMtd:r.mtd, revGoal:r.revGoal,
+                      booked:r.booked, clsMtd:r.clsMtd, clsGoal:r.clsGoal, clsToday:r.clsToday };
+      const idx = hist.findIndex(h => h.date === r.date);
+      if (idx >= 0) hist.splice(idx, 1, entry); else hist.push(entry);
+      personalCount++;
+
+    } else {
+      /* ── 小組報表格式 ── */
+      const { date, parsed } = parseGroupReportData(block);
+      if (!date || !Object.keys(parsed).length) return;
+      /* 自動新增成員 */
+      Object.keys(parsed).forEach(name => {
+        if (!members.some(m => m.toLowerCase() === name.toLowerCase())) {
+          members.push(name); selectedMembers.add(name);
+        }
+      });
+      /* 寫入 team_data */
+      Object.entries(parsed).forEach(([name, data]) => {
+        const canon = members.find(m => m.toLowerCase() === name.toLowerCase()) || name;
+        if (!td[canon]) td[canon] = {};
+        const prev = td[canon][date] || {};
+        td[canon][date] = { mtd: data.mtd, booked: data.booked, cls: prev.cls || 0 };
+      });
+      groupCount++;
+    }
+  });
+
+  hist.sort((a, b) => a.date.localeCompare(b.date));
+  storage.setItem(SK_HIST, JSON.stringify(hist));
+  saveTeamMembers(members);
+  saveTeamData(td);
+
+  /* 顯示結果 */
+  const parts = [];
+  if (groupCount)    parts.push(`小組報表 ${groupCount} 天`);
+  if (personalCount) parts.push(`個人報表 ${personalCount} 天`);
+  const msg = `已匯入 ${parts.join('、')} 的數據`;
+
+  document.getElementById('groupResultTitle').textContent = '匯入完成';
+  document.getElementById('groupReportText').textContent  = msg;
+  document.getElementById('groupCopyBtn').style.display   = 'none';
+  const card = document.getElementById('groupResultCard');
+  card.classList.add('visible');
+  card.scrollIntoView({ behavior:'smooth', block:'start' });
+
+  /* 如在趨勢圖頁面就重整 */
+  if (document.getElementById('tab-trend').classList.contains('active') && currentSub === 'team') {
+    renderMemberFilter(); renderTeamChart();
+  }
+  console.log('[import]', msg);
+}
 
 /* ════════════════════════════════════════
    Personal trend
@@ -937,7 +1047,7 @@ function saveToHistory() {
   const btn=document.getElementById('saveHistBtn');
   btn.textContent='已儲存！'; btn.classList.add('saved');
   setTimeout(()=>{ btn.textContent='儲存到趨勢紀錄'; btn.classList.remove('saved'); },2000);
-  if (document.getElementById('tab-trend').classList.contains('active') && currentSub==='personal') renderTrend();
+  /* 個人趨勢 UI 已移除，數據靜默儲存 */
 }
 
 function setPersonalScale(s) {
@@ -1144,10 +1254,11 @@ function saveTeamEntry() {
 ════════════════════════════════════════ */
 function switchSub(name) {
   currentSub=name;
-  document.querySelectorAll('.subbtn').forEach((btn,i)=>btn.classList.toggle('active',['personal','team','manage'][i]===name));
-  document.getElementById('subPersonal').style.display=name==='personal'?'block':'none';
-  document.getElementById('subTeam').style.display     =name==='team'    ?'block':'none';
-  document.getElementById('subManage').style.display   =name==='manage'  ?'block':'none';
+  /* 趨勢圖頁面只有兩個 subbtn（小組趨勢、成員管理） */
+  document.querySelectorAll('#tab-trend .subbtn').forEach((btn,i)=>
+    btn.classList.toggle('active',['team','manage'][i]===name));
+  document.getElementById('subTeam').style.display   = name==='team'   ? 'block' : 'none';
+  document.getElementById('subManage').style.display = name==='manage' ? 'block' : 'none';
   refreshCurrentSub();
 }
 function switchTeamChart(type) {
@@ -1164,7 +1275,6 @@ function setTeamScale(s) {
 }
 function setTeamMode(m) {
   teamMode=m;
-  document.querySelectorAll('#teamScaleCtrl .mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
   renderTeamChart();
 }
 function resetTeamZoom() { if (teamChartInst) teamChartInst.resetZoom(); }
