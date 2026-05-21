@@ -1195,7 +1195,16 @@ function getTeamMembers() {
 }
 function saveTeamMembers(m) { storage.setItem(SK_MEMBERS,JSON.stringify(m)); }
 function getTeamData()      { const s=storage.getItem(SK_TDATA); return s?JSON.parse(s):{}; }
-function saveTeamData(d)    { storage.setItem(SK_TDATA,JSON.stringify(d)); }
+function saveTeamData(d) {
+  /* 每位成員的日期鍵按升冪排序後再存入，確保圖表 X 軸有序 */
+  const sorted = {};
+  Object.keys(d).forEach(member => {
+    const dates = Object.keys(d[member]).sort((a, b) => a.localeCompare(b));
+    sorted[member] = {};
+    dates.forEach(dt => { sorted[member][dt] = d[member][dt]; });
+  });
+  storage.setItem(SK_TDATA, JSON.stringify(sorted));
+}
 function resetTeamData()    { if (!confirm('確定清除所有小組趨勢數據？')) return; storage.removeItem(SK_TDATA); renderTeamChart(); }
 
 function addMember() {
