@@ -828,7 +828,13 @@ function makeGroupReport(inputText, pd) {
   const myName=getMyName();
   const esc=myName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   const isMe=s=>myName?new RegExp('^'+esc+'\\s*[:：]','i').test(s.trim()):false;
-  const myRev=()=>{ const pct=pd.revGoal>0?Math.floor(pd.proj/pd.revGoal*100):0; return `${myName} : ${pd.mtd}/ ${pd.revGoal}/ ${pct}%`; };
+  const myRev=(origLine)=>{
+    /* 從原始報表的 Leo 行抓取目標格式（保留 17w / 170000 原字串） */
+    const segs = origLine.split(/[\/／]/);
+    const goalStr = segs.length >= 2 ? segs[1].trim() : String(pd.revGoal);
+    const pct = pd.revGoal > 0 ? Math.floor(pd.proj / pd.revGoal * 100) : 0;
+    return `${myName} : ${pd.mtd}/ ${goalStr}/ ${pct}%`;
+  };
   const myCls=()=>{ const s=stuSuffix(pd.stuAdd,pd.stuSub); return `${myName} : ${pd.booked}/ ${pd.clsGoal} / ${pd.stu}${s}`; };
   const myFa =()=>`${myName}: ${pd.fa1}/ ${pd.fa2}/ ${pd.fa3}`;
 
@@ -852,8 +858,8 @@ function makeGroupReport(inputText, pd) {
     if (state==='header' && isPL(t)) state='rev';
     switch(state) {
       case 'rev':
-        if (isMe(t)) { out.push(myRev()); totRev+=pd.mtd; }
-        else { const m=t.match(/[:：]\s*(\d+)/); if(m) totRev+=parseInt(m[1]); out.push(line); }
+        if (isMe(t)) { out.push(myRev(t)); totRev+=pd.mtd; }
+        else { const m=t.match(/[:：]\s*(\d+)/); if(m) totRev+=parseInt(m[1]); out.push(line); /* 其他人原行不動 */ }
         break;
       case 'revSum':
         if (/^\d+[／\/]/.test(t)) { const d=t.includes('／')?'／':'/'; out.push(`${totRev}${d}${grStr}`); }
